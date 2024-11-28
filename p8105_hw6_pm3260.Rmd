@@ -1,0 +1,124 @@
+---
+title: "p8105_hw6_pm3260"
+author: "Pradeeti Mainali"
+date: "2024-11-21"
+output: github_document
+---
+
+```{r setup}
+library(tidyverse)
+library(rnoaa)
+library(purrr)
+```
+
+# Problem 1 (no points)
+
+```{r download}
+
+```
+
+# Problem 2
+
+### Data cleaning/setup:
+
+```{r washpost, warning=FALSE}
+homicide = 
+  read.csv("data/homicide-data.csv")|>
+  janitor::clean_names() |>
+  mutate(
+    state = str_to_upper(state),
+    city_state = str_c(city, ", ", state),
+    solved = case_when(
+      disposition == "Closed by arrest" ~ 1, 
+      disposition %in% c("Closed without arrest", "Open/No arrest") ~ 0),
+      victim_age = as.numeric(victim_age)
+    ) |>
+  filter(
+    victim_race %in% c("White", "Black"),
+    !city_state %in% c("Dallas, TX", "Phoenix, AZ", "Kansas City, MO", "Tulsa, AL")
+    )
+
+```
+
+### Adjusted OR and 95% CI for Baltimore, MD:
+
+```{r balt}
+homicide_balt =
+  homicide |>
+  filter(city_state == "Baltimore, MD") |>
+  glm(solved ~ victim_age + victim_race + victim_sex, data = _, 
+      family = binomial()) |>
+  broom::tidy() |>
+  mutate(OR = exp(estimate),
+         conf.low = exp(estimate - 1.96 * std.error),
+         conf.high = exp(estimate + 1.96 * std.error)
+         ) |>
+  filter(term == "victim_sexMale") |>
+  select(OR, conf.low, conf.high)
+```
+
+#### Interpretation: 
+
+Adjusted OR: 0.4255117
+
+Adjusted 95% CI: (0.324559, 0.5578655)
+
+Adjusting for age and race, the estimated odds of having a solved case for those identifying as female is 0.43 times the odds of having a solved case for those identifying as male. We are 95% confident that the true OR lies between 0.325 and 0.558.
+
+### Adjusted OR and 95% CI for all cities in dataset.
+
+```{r all_cities}
+homicide_cities =
+  homicide |>
+  group_by(city_state) |>
+  nest() |>
+  mutate(
+    glm_results = map(data, ~glm(solved ~ victim_age + victim_race + victim_sex, data = .x, family = binomial())),
+    tidy_results = map(glm_results, ~broom::tidy(.x))) |>
+  mutate(
+    or_city = map(tidy_results, ~ .x |>
+                  filter(term == "victim_sexMale") |>
+                  mutate(
+                    OR = exp(estimate),
+                    conf.low = exp(estimate - 1.96 * std.error),
+                    conf.high = exp(estimate + 1.96 * std.error))|>
+                  select(OR, conf.low, conf.high))) |>
+  unnest(or_city) |>
+  select(city_state, OR, conf.low, conf.high)
+
+print(homicide_cities)
+```
+
+### Plot of Adjusted OR and 95% CI for Solved Homicides by Sex by City
+
+```{r plot_cities, fig.height=8}
+ggplot(homicide_cities, aes(x = reorder(city_state, OR), y = OR)) +
+  geom_point(size = 2, color = "black") +
+  geom_errorbar(aes(ymin = conf.low, ymax = conf.high), width = 0.2, color = "hotpink") +
+  coord_flip() +
+  labs(
+    title = "Adjusted Odds Ratios (OR) for Solved Homicides (Male vs Female Victims) by City",
+    x = "City, State",
+    y = "Adjusted Odds Ratio (OR)",
+    caption = "ORs and CIs are adjusted for victim age and race"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.y = element_text(size = 8),  
+    plot.title = element_text(hjust = 0.5), 
+    plot.caption = element_text(hjust = 0.5))
+```
+
+#### Description:
+
+Only 4 cities have ORs over 1, meaning there is a higher odds for females in having a solved case than males. However, even these cities have their CI encompass the null value of 1 and below, meaning that there is a chance the estimated adjusted OR is the same as the true adjusted odds. 
+
+New York has the smallest OR, meaning victims who identify as women have the least odds of having a solved case here than the other cities in this data set. 
+
+# Problem 3
+
+```{r}
+
+```
+
+
