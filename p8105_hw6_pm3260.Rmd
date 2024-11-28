@@ -117,8 +117,53 @@ New York has the smallest OR, meaning victims who identify as women have the lea
 
 # Problem 3
 
-```{r}
+```{r bwt}
+birthweight_df =
+  read.csv("data/birthweight.csv") |>
+  janitor::clean_names() |>
+  mutate(
+    babysex = factor(babysex, levels = c(1, 2), 
+                     labels = c("Male", "Female")),
+    frace = factor(frace, levels = c(1, 2, 3, 4, 8, 9), 
+                   labels = c("White", "Black", "Asian", "Puerto Rican", "Other", "Unknown")),
+    mrace = factor(mrace, levels = c(1, 2, 3, 4, 8), 
+                   labels = c("White", "Black", "Asian", "Puerto Rican", "Other")),
+    malform = factor(malform, levels = c(0, 1), 
+                     labels = c("Absent", "Present")))
+```
+
+#### Regression
+
+```{r regression}
+fit =
+  lm(bwt ~ babysex + bhead + blength + delwt + gaweeks + mheight + mrace + parity + ppwt + smoken, data = birthweight_df) 
+
+
+fit |>
+  broom::tidy() |>
+  mutate(
+    p.value = format.pval(p.value, scientific = FALSE)
+  ) |>
+  knitr::kable()
 
 ```
 
+Model based on hypothesized structure for the factors. All the independent factors are hypothesized to be associated with bwt. Additionally, their p-value in a full model were lower than 0.05.
+
+The process involved starting with a full model and removing the variable with the highest p-value above 0.05 and then rerunning the regression model until all the variables had p-values under 0.05.
+
+```{r residuals}
+birthweight_df =
+  birthweight_df |>
+  modelr::add_residuals(fit) |>
+  modelr::add_predictions(fit)
+
+ggplot(birthweight_df, aes(x = pred, y = resid)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE, color = "blue") +
+  labs(title = "Residuals vs Fitted Values",
+       x = "Fitted Values", 
+       y = "Residuals") +
+  theme_minimal()
+```
 
