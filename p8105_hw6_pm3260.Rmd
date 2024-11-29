@@ -5,17 +5,16 @@ date: "2024-11-21"
 output: github_document
 ---
 
-```{r setup}
+```{r setup, message=FALSE}
 library(tidyverse)
 library(rnoaa)
 library(purrr)
+library(modelr)
 ```
 
 # Problem 1 (no points)
 
-```{r download}
-
-```
+Unable to load the data set. Issue with the dates avaiable for the ID needed for this problem.
 
 # Problem 2
 
@@ -86,7 +85,6 @@ homicide_cities =
   unnest(or_city) |>
   select(city_state, OR, conf.low, conf.high)
 
-print(homicide_cities)
 ```
 
 ### Plot of Adjusted OR and 95% CI for Solved Homicides by Sex by City
@@ -132,14 +130,14 @@ birthweight_df =
                      labels = c("Absent", "Present")))
 ```
 
-#### Regression
+#### Regression Model:
 
 ```{r regression}
-fit =
+fit_1 =
   lm(bwt ~ babysex + bhead + blength + delwt + gaweeks + mheight + mrace + parity + ppwt + smoken, data = birthweight_df) 
 
 
-fit |>
+fit_1 |>
   broom::tidy() |>
   mutate(
     p.value = format.pval(p.value, scientific = FALSE)
@@ -155,8 +153,8 @@ The process involved starting with a full model and removing the variable with t
 ```{r residuals}
 birthweight_df =
   birthweight_df |>
-  modelr::add_residuals(fit) |>
-  modelr::add_predictions(fit)
+  modelr::add_residuals(fit_1) |>
+  modelr::add_predictions(fit_1)
 
 ggplot(birthweight_df, aes(x = pred, y = resid)) +
   geom_point() +
@@ -165,5 +163,45 @@ ggplot(birthweight_df, aes(x = pred, y = resid)) +
        x = "Fitted Values", 
        y = "Residuals") +
   theme_minimal()
+```
+
+### Comparison with other models:
+
+```{r}
+fit_2 = lm(bwt ~ blength + gaweeks, data = birthweight_df)
+
+fit_3 = lm(bwt ~ bhead * blength * babysex, data = birthweight_df)
+```
+
+#### Cross validation:
+
+```{r}
+cv_df = 
+  crossv_mc(birthweight_df, 100)
+
+cv_res_df = 
+  cv_df |>
+  mutate(
+    fit_1 = map(train, \(x) lm(bwt ~ babysex + bhead + blength + delwt + 
+                               gaweeks + mheight + mrace + parity + 
+                               ppwt + smoken, data = x)),
+    fit_2 = map(train, \(x) lm(bwt ~ blength + gaweeks, data = x)),
+    fit_3 = map(train, \(x) lm(bwt ~ bhead * blength * babysex, data = x))
+  ) |>
+  mutate(
+    rmse_model_1 = map2_dbl(fit_1, test, rmse),
+    rmse_model_2 = map2_dbl(fit_2, test, rmse),
+    rmse_model_3 = map2_dbl(fit_3, test, rmse)
+  )
+
+cv_res_df |> 
+  select(starts_with("rmse")) |> 
+  pivot_longer(
+    everything(),
+    names_to = "model", 
+    values_to = "rmse",
+    names_prefix = "rmse_") |> 
+  mutate(model = fct_inorder(model)) |> 
+  ggplot(aes(x = model, y = rmse)) + geom_violin()
 ```
 
